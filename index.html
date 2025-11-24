@@ -1,571 +1,503 @@
-
-
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 强制竖屏，禁止缩放 -->
+    <!-- 关键：锁定视口，防止移动端缩放导致的布局错乱 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Moon Runner: Dark Side</title>
+    <title>Moon Runner: Vertical Fixed</title>
     <style>
+        /* 引入字体 */
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
 
-        /* --- 1. 基础布局 --- */
         body {
             margin: 0; padding: 0;
-            background: #000;
+            background-color: #000;
             height: 100vh; width: 100vw;
             overflow: hidden;
             display: flex; justify-content: center; align-items: center;
             font-family: 'Rajdhani', sans-serif;
             user-select: none; -webkit-user-select: none;
-            touch-action: none;
+            touch-action: none; /* 禁止浏览器默认触摸行为 */
         }
 
-        /* 背景层 */
-        #stars-bg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, #050510 0%, #101025 100%);
-            z-index: -1;
-        }
-
-        /* 游戏容器 - 9:16 竖屏比例 */
-        #game-container {
+        /* 游戏容器：固定9:16比例，适配手机竖屏 */
+        #game-stage {
             position: relative;
             width: 100%; height: 100%;
-            max-width: 450px; /* 限制在大屏上的最大宽度 */
+            max-width: 450px; /* 平板/桌面端最大宽度 */
             aspect-ratio: 9/16;
-            background: #000;
-            box-shadow: 0 0 30px rgba(0, 210, 255, 0.15);
+            background: #050508; /* 这里的背景色确保Canvas透明时也有底色 */
+            box-shadow: 0 0 40px rgba(0, 150, 255, 0.2);
             overflow: hidden;
         }
-        /* 隐藏关激活时的红色氛围 */
-        #game-container.dark-mode {
-            box-shadow: 0 0 30px rgba(255, 50, 50, 0.3);
-            border: 1px solid #522;
+        
+        canvas { 
+            display: block; 
+            width: 100%; height: 100%; 
         }
 
-        canvas { display: block; width: 100%; height: 100%; }
-
-        /* --- 2. UI 层 --- */
+        /* UI 层 */
         .ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 20;
+            pointer-events: none; z-index: 10;
             display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
         }
-        .clickable { pointer-events: auto; }
 
-        /* --- 3. 虚拟按键 (底部布局) --- */
+        /* 顶部 HUD */
+        #hud {
+            padding: 15px;
+            display: flex; justify-content: space-between;
+            font-family: 'Orbitron'; color: #fff;
+            text-shadow: 0 0 4px #000;
+        }
+        .bar-wrap {
+            width: 100px; height: 8px; 
+            background: #333; border: 1px solid #666;
+            margin-top: 5px; transform: skewX(-15deg);
+        }
+        #fuel-bar { width: 100%; height: 100%; background: #00d2ff; transition: width 0.1s; }
+
+        /* 底部虚拟按键 */
         #controls {
-            position: absolute; bottom: 20px; left: 0; width: 100%; height: 180px;
-            pointer-events: none; z-index: 50;
+            position: absolute; bottom: 20px; width: 100%;
             display: flex; justify-content: space-between;
             padding: 0 20px; box-sizing: border-box;
+            pointer-events: none;
+            z-index: 20;
         }
-        
-        .btn-group {
-            display: flex; gap: 15px; align-items: flex-end; pointer-events: auto;
-        }
+        .btn-group { display: flex; gap: 15px; align-items: flex-end; pointer-events: auto; }
 
-        .t-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid rgba(255, 255, 255, 0.2);
+        /* 触摸按钮样式 */
+        .touch-btn {
             border-radius: 50%;
-            backdrop-filter: blur(5px);
-            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.3);
+            backdrop-filter: blur(4px);
+            color: rgba(255,255,255,0.8);
             display: flex; justify-content: center; align-items: center;
             font-family: 'Orbitron'; font-weight: bold;
-            transition: transform 0.1s, background 0.1s;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            transition: transform 0.05s, background 0.05s;
         }
-        .t-btn:active, .t-btn.active {
-            background: rgba(0, 210, 255, 0.4);
-            transform: scale(0.9);
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(0, 210, 255, 0.5);
             border-color: #fff;
+            transform: scale(0.95);
         }
 
-        /* 方向键 */
-        .btn-dir { width: 65px; height: 65px; font-size: 24px; }
-        
-        /* 功能键 */
-        .btn-fly { width: 80px; height: 80px; border-color: #00d2ff; color: #00d2ff; font-size: 14px; }
-        .btn-lens { 
-            width: 60px; height: 60px; 
-            border-color: #ff4d4d; color: #ff4d4d; font-size: 12px; 
-            margin-bottom: 10px;
-        }
+        .btn-arrow { width: 65px; height: 65px; font-size: 24px; }
+        .btn-action { width: 80px; height: 80px; font-size: 14px; border-color: #00d2ff; color:#00d2ff; }
+        .btn-lens { width: 60px; height: 60px; font-size: 12px; border-color: #ff5555; color:#ff5555; margin-bottom: 10px; }
 
-        /* --- 4. HUD 信息 --- */
-        #hud {
+        /* 菜单界面 */
+        #menu-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; display: none;
-        }
-        .hud-top {
-            position: absolute; top: 15px; width: 100%;
-            display: flex; justify-content: space-between; padding: 0 20px;
-            box-sizing: border-box;
-        }
-        .fuel-box { width: 100px; }
-        .fuel-track { height: 6px; background: #333; border: 1px solid #555; margin-top: 4px; transform: skewX(-15deg); }
-        #fuel-bar { height: 100%; width: 100%; background: #00d2ff; transition: width 0.1s; }
-        
-        .star-box { 
-            color: #ffd700; font-family: 'Orbitron'; font-size: 16px; 
-            text-shadow: 0 0 5px #ffd700;
-        }
-
-        /* --- 5. 菜单样式 --- */
-        .menu-screen {
-            background: rgba(0, 0, 0, 0.92);
-            backdrop-filter: blur(10px);
+            background: rgba(5, 8, 12, 0.95);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 50; pointer-events: auto;
             transition: opacity 0.5s;
         }
         h1 {
-            font-family: 'Orbitron'; font-size: 36px; margin: 0; text-align: center;
-            background: linear-gradient(to bottom, #fff, #00d2ff);
+            font-family: 'Orbitron'; font-size: 42px; color: #fff; margin-bottom: 5px;
+            text-shadow: 0 0 20px #00d2ff;
+            background: -webkit-linear-gradient(#fff, #00d2ff);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        .menu-btn {
+        .start-btn {
             margin: 15px; padding: 15px 40px;
-            border: 1px solid #00d2ff; color: #00d2ff;
             background: rgba(0, 210, 255, 0.1);
+            border: 1px solid #00d2ff; color: #00d2ff;
             font-family: 'Orbitron'; font-size: 18px;
-            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            cursor: pointer; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), 0 100%, 0 10px);
         }
-        .menu-btn.hard { border-color: #f00; color: #f00; background: rgba(255,0,0,0.1); }
-
-        /* 隐藏关警告 */
-        #warning-flash {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: red; opacity: 0; pointer-events: none; z-index: 10;
-            animation: none;
-        }
-        @keyframes flashAlarm {
-            0%, 100% { opacity: 0; } 50% { opacity: 0.3; }
+        .start-btn:active { background: rgba(0, 210, 255, 0.3); transform: scale(0.98); }
+        
+        /* 隐藏关特效 */
+        .dark-mode canvas { filter: contrast(1.2) sepia(0.3) hue-rotate(-50deg); }
+        #warning-overlay {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: red; opacity: 0; pointer-events: none; z-index: 5;
         }
 
     </style>
 </head>
 <body>
 
-<div id="stars-bg"></div>
-
-<div id="game-container">
+<div id="game-stage">
     <canvas id="gameCanvas"></canvas>
-    
-    <!-- 红色警报闪烁层 -->
-    <div id="warning-flash"></div>
+    <div id="warning-overlay"></div>
 
-    <!-- 顶部信息 -->
-    <div id="hud">
-        <div class="hud-top">
-            <div class="fuel-box">
-                <div style="font-size:10px; color:#aaa;">JETPACK</div>
-                <div class="fuel-track"><div id="fuel-bar"></div></div>
-            </div>
-            <div class="star-box">
-                DATA: <span id="cur-star">0</span>/<span id="max-star">3</span>
-            </div>
+    <!-- HUD -->
+    <div id="hud" class="ui-layer">
+        <div>
+            <div style="font-size:10px; color:#aaa;">THRUSTER</div>
+            <div class="bar-wrap"><div id="fuel-bar"></div></div>
+        </div>
+        <div style="text-align:right; color:#ffd700;">
+            DATA CHIPS<br>
+            <span id="stars-count">0</span> / 3
         </div>
     </div>
 
-    <!-- 底部虚拟按键 -->
+    <!-- 虚拟按键 -->
     <div id="controls">
         <div class="btn-group">
-            <div class="t-btn btn-dir" id="btn-left">←</div>
-            <div class="t-btn btn-dir" id="btn-right">→</div>
+            <div class="touch-btn btn-arrow" id="btn-left">←</div>
+            <div class="touch-btn btn-arrow" id="btn-right">→</div>
         </div>
         <div class="btn-group">
-            <div class="t-btn btn-lens" id="btn-lens">LENS</div>
-            <div class="t-btn btn-fly" id="btn-fly">FLY</div>
+            <div class="touch-btn btn-lens" id="btn-lens">LENS</div>
+            <div class="touch-btn btn-action" id="btn-fly">FLY</div>
         </div>
     </div>
 
-    <!-- 开始菜单 -->
-    <div id="start-screen" class="ui-layer menu-screen">
+    <!-- 菜单 -->
+    <div id="menu-screen">
         <h1>MOON RUNNER</h1>
-        <div style="color:#667; font-size:12px; margin-bottom:30px; letter-spacing:2px;">VERTICAL OPERATION</div>
-        
-        <button class="menu-btn clickable" onclick="initGame('NORMAL')">NORMAL</button>
-        <button class="menu-btn hard clickable" onclick="initGame('HARD')">HARDCORE</button>
-        
-        <div style="margin-top:20px; font-size:11px; color:#555; text-align:center; line-height:1.5;">
-            Collect ALL 3 STARS to enter<br>the Hidden Dimension.
+        <div style="color:#667; letter-spacing:2px; margin-bottom:40px;">VERTICAL OPS</div>
+        <button class="start-btn" onclick="startGame('NORMAL')">START MISSION</button>
+        <button class="start-btn" style="border-color:#f44; color:#f44;" onclick="startGame('HARD')">HARDCORE</button>
+        <div style="margin-top:30px; font-size:12px; color:#555; text-align:center; line-height:1.6;">
+            Collect 3 CHIPS to breach<br>the Firewall (Hidden Level)
         </div>
-    </div>
-
-    <!-- 胜利/结束菜单 -->
-    <div id="end-screen" class="ui-layer menu-screen" style="opacity:0; pointer-events:none;">
-        <h1 id="end-title">MISSION COMPLETE</h1>
-        <div id="end-desc" style="color:#ccc; margin:20px; text-align:center;"></div>
-        <button class="menu-btn clickable" onclick="location.reload()">RESTART</button>
     </div>
 </div>
 
 <script>
+// --- 初始化画布 ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// 竖屏逻辑分辨率
-const W = 360;
+// 设定固定的逻辑分辨率 (360x640)，CSS会自动缩放适应屏幕
+const W = 360; 
 const H = 640;
 canvas.width = W;
 canvas.height = H;
 
-// --- 全局状态 ---
-let SETTINGS = {};
+// --- 游戏参数预设 ---
 const PRESETS = {
-    NORMAL: { g: 0.25, acc: 0.5, fric: 0.8, maxV: 5.5, jet: 0.45, fuel: 100, regen: 1.5, canShoot: false },
-    HARD: { g: 0.35, acc: 0.4, fric: 0.9, maxV: 6.5, jet: 0.6, fuel: 70, regen: 0.6, canShoot: true } // 困难模式敌人会射击
+    NORMAL: { g: 0.25, acc: 0.5, fric: 0.8, maxV: 5.5, jet: 0.45, fuel: 100, regen: 1.5, shoot: false },
+    HARD: { g: 0.35, acc: 0.4, fric: 0.9, maxV: 6.5, jet: 0.6, fuel: 60, regen: 0.6, shoot: true }
 };
 
-const KEYS = { Left:false, Right:false, Up:false, Lens:false };
+// 默认使用 Normal 防止未初始化错误
+let SETTINGS = JSON.parse(JSON.stringify(PRESETS.NORMAL));
+
+// --- 全局状态 ---
+const KEYS = { L:false, R:false, U:false, Lens:false };
 const STATE = {
     mode: 'MENU', // MENU, PLAY, HIDDEN, END
-    frame: 0, collected: 0, totalStars: 0,
-    camY: 0, // 主要是垂直卷轴
-    spawn: {x: 50, y: H - 100}
+    frame: 0,
+    collected: 0,
+    camY: 0, // 摄像机垂直位置
+    spawn: {x: 50, y: 500} // 初始出生点
 };
 
-// 实体池
-let platforms = [], stars = [], particles = [], enemies = [], bullets = [];
-// 关键物体
-let moonGate = {x: 0, y: 0, r: 40};
-let trueCore = {x: 0, y: 0}; // 隐藏关终点
+// 游戏对象池
+let platforms = [], stars = [], enemies = [], bullets = [], particles = [];
+let moon = {x:0, y:0};
 
-// --- 触摸控制系统 ---
-function bindTouch(id, key) {
+// --- 触摸控制绑定 ---
+function bindBtn(id, key) {
     const btn = document.getElementById(id);
-    const start = (e) => { e.preventDefault(); KEYS[key] = true; btn.classList.add('active'); };
-    const end = (e) => { e.preventDefault(); KEYS[key] = false; btn.classList.remove('active'); };
-    btn.addEventListener('touchstart', start, {passive:false});
-    btn.addEventListener('touchend', end, {passive:false});
-    // PC调试兼容
-    btn.addEventListener('mousedown', start);
-    btn.addEventListener('mouseup', end);
+    const press = (e) => { e.preventDefault(); KEYS[key] = true; btn.classList.add('active'); };
+    const release = (e) => { e.preventDefault(); KEYS[key] = false; btn.classList.remove('active'); };
+    
+    btn.addEventListener('touchstart', press, {passive: false});
+    btn.addEventListener('touchend', release, {passive: false});
+    // 鼠标兼容
+    btn.addEventListener('mousedown', press);
+    btn.addEventListener('mouseup', release);
 }
-bindTouch('btn-left', 'Left');
-bindTouch('btn-right', 'Right');
-bindTouch('btn-fly', 'Up');
-bindTouch('btn-lens', 'Lens');
+bindBtn('btn-left', 'L');
+bindBtn('btn-right', 'R');
+bindBtn('btn-fly', 'U');
+bindBtn('btn-lens', 'Lens');
 
-// 键盘兼容
+// 键盘绑定
 window.addEventListener('keydown', e => {
-    if(e.code==='ArrowLeft') KEYS.Left=true; if(e.code==='ArrowRight') KEYS.Right=true;
-    if(e.code==='ArrowUp') KEYS.Up=true; if(e.code==='Space') KEYS.Lens=true;
+    if(e.key==='ArrowLeft') KEYS.L=true; if(e.key==='ArrowRight') KEYS.R=true;
+    if(e.key==='ArrowUp') KEYS.U=true; if(e.code==='Space') KEYS.Lens=true;
 });
 window.addEventListener('keyup', e => {
-    if(e.code==='ArrowLeft') KEYS.Left=false; if(e.code==='ArrowRight') KEYS.Right=false;
-    if(e.code==='ArrowUp') KEYS.Up=false; if(e.code==='Space') KEYS.Lens=false;
+    if(e.key==='ArrowLeft') KEYS.L=false; if(e.key==='ArrowRight') KEYS.R=false;
+    if(e.key==='ArrowUp') KEYS.U=false; if(e.code==='Space') KEYS.Lens=false;
 });
 
-// --- 实体类 ---
+// --- 实体类定义 ---
 
 class Player {
-    constructor() { this.w=16; this.h=24; this.reset(); }
-    reset() {
-        this.x = STATE.spawn.x; this.y = STATE.spawn.y;
-        this.vx = 0; this.vy = 0; this.fuel = SETTINGS.fuel;
-        this.grounded = false;
+    constructor() {
+        this.w = 16; this.h = 24;
+        this.reset();
     }
+    
+    reset() {
+        this.x = STATE.spawn.x;
+        this.y = STATE.spawn.y;
+        this.vx = 0; this.vy = 0;
+        this.fuel = SETTINGS.fuel;
+        this.grounded = false;
+        spawnFx(this.x, this.y, 20, '#0ff');
+    }
+
     update() {
-        // 水平移动
-        if(KEYS.Left) this.vx -= SETTINGS.acc;
-        if(KEYS.Right) this.vx += SETTINGS.acc;
-        
+        // 左右移动
+        if(KEYS.L) this.vx -= SETTINGS.acc;
+        if(KEYS.R) this.vx += SETTINGS.acc;
+
         // 飞行
-        if(KEYS.Up && this.fuel > 0) {
+        if(KEYS.U && this.fuel > 0) {
             if(this.vy > -SETTINGS.maxV) this.vy -= SETTINGS.jet;
-            this.fuel -= 0.8; this.grounded = false;
-            if(STATE.frame%3==0) spawnPart(this.x+8, this.y+24, 1, '#fa0');
+            this.fuel -= 0.8;
+            this.grounded = false;
+            if(STATE.frame % 3 === 0) spawnFx(this.x+this.w/2, this.y+this.h, 1, '#fa0', 2);
+        } else if (this.grounded && this.fuel < SETTINGS.fuel) {
+            this.fuel += SETTINGS.regen;
         }
 
-        // 物理
+        // 物理结算
         this.vy += SETTINGS.g;
         this.vy *= 0.98; // 空气阻力
-        this.vx *= this.grounded ? (this.ice ? 0.98 : SETTINGS.fric) : 0.95;
+        this.vx *= this.grounded ? (this.onIce ? 0.99 : SETTINGS.fric) : 0.95;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // 边界限制
+        if(this.x < 0) { this.x = 0; this.vx = 0; }
+        if(this.x > W - this.w) { this.x = W - this.w; this.vx = 0; }
         
-        // 燃料回复
-        if(this.grounded && !KEYS.Up && this.fuel < SETTINGS.fuel) this.fuel += SETTINGS.regen;
-
-        this.x += this.vx; this.y += this.vy;
-        this.grounded = false; this.ice = false;
-
-        // 边界限制 (左右)
-        if(this.x < 0) this.x = 0;
-        if(this.x > W - this.w) this.x = W - this.w;
-        // 掉落死亡
+        // 掉落重置
         if(this.y > STATE.camY + H + 100) this.die();
 
+        this.grounded = false; 
+        this.onIce = false;
         this.collide();
     }
 
     collide() {
+        // 简单的AABB碰撞
         for(let p of platforms) {
-            if(p.t === 1 && !KEYS.Lens) continue; // Phase block
-            
-            if(this.x < p.x+p.w && this.x+this.w > p.x && this.y+this.h > p.y && this.y < p.y+p.h) {
-                if(p.t === 3) { this.die(); return; } // Spike
+            // 知识锁：如果没开透镜，忽略红色虚像
+            if(p.type === 1 && !KEYS.Lens) continue;
+
+            if(this.x < p.x + p.w && this.x + this.w > p.x &&
+               this.y + this.h > p.y && this.y < p.y + p.h) {
                 
-                // 落地检测
-                if(this.vy >= 0 && (this.y+this.h - this.vy) <= p.y + 10) {
-                    this.y = p.y - this.h; this.vy = 0; this.grounded = true;
-                    if(p.t === 2) { this.ice = true; this.vx += p.s; } // Ice slide
-                    if(p.t === 4 && !p.act) { // Checkpoint
-                        p.act = true; STATE.spawn = {x:p.x, y:p.y-30};
-                        spawnPart(p.x+p.w/2, p.y, 10, '#0f0');
+                // 尖刺 = 死亡
+                if(p.type === 3) { this.die(); return; }
+
+                // 从上方落下
+                if(this.vy >= 0 && (this.y + this.h - this.vy) <= p.y + 12) {
+                    this.y = p.y - this.h;
+                    this.vy = 0;
+                    this.grounded = true;
+                    
+                    // 冰面滑行
+                    if(p.type === 2) { this.onIce = true; this.vx += p.slide; }
+                    
+                    // 存档点激活
+                    if(p.type === 4 && !p.active) {
+                        p.active = true;
+                        STATE.spawn = {x: p.x + p.w/2 - 8, y: p.y - 30};
+                        spawnFx(p.x + p.w/2, p.y, 15, '#0f0');
                     }
                 }
             }
         }
     }
-    
+
     die() {
-        spawnPart(this.x, this.y, 20, '#f00');
+        spawnFx(this.x, this.y, 30, '#f00');
         this.reset();
-        // 如果在隐藏关死亡，重新开始隐藏关
+        // 如果是在隐藏关，回到隐藏关起点
         if(STATE.mode === 'HIDDEN') {
-            this.x = 50; this.y = -1000; // 隐藏关起点
+            this.x = 50; this.y = -1000; 
         }
     }
 
     draw(ctx) {
+        // 简单的宇航员绘制
         ctx.fillStyle = '#fff'; ctx.fillRect(this.x, this.y, this.w, this.h);
-        // 背包
-        ctx.fillStyle = this.fuel>10?'#0f0':'#f00'; ctx.fillRect(this.x-4, this.y+4, 4, 8);
+        // 燃料背包指示灯
+        ctx.fillStyle = this.fuel > 20 ? '#0f0' : '#f00';
+        ctx.fillRect(this.x - 4, this.y + 4, 4, 8);
         // 面罩
-        ctx.fillStyle = '#00d2ff'; ctx.fillRect(this.x+4, this.y+4, 8, 6);
+        ctx.fillStyle = '#0ff'; ctx.fillRect(this.x + 4, this.y + 4, 8, 6);
     }
 }
 
 class Enemy {
-    constructor(x, y, range, type='WALKER') {
-        this.x = x; this.y = y; this.sx = x; // spawn x
-        this.range = range; this.type = type;
-        this.w = 20; this.h = 20;
-        this.dir = 1; this.speed = 1.5;
-        this.lastShot = 0;
+    constructor(x, y, range, shooter) {
+        this.x = x; this.y = y; this.sx = x;
+        this.range = range; this.shooter = shooter;
+        this.w = 24; this.h = 20;
+        this.dir = 1; this.lastShot = 0;
     }
-    update() {
-        // 巡逻逻辑
-        this.x += this.speed * this.dir;
+    update(player) {
+        // 巡逻
+        this.x += this.dir;
         if(Math.abs(this.x - this.sx) > this.range) this.dir *= -1;
-
-        // 射击逻辑 (仅限困难模式 & 射手类型)
-        if(SETTINGS.canShoot && this.type === 'SHOOTER') {
-            if(STATE.frame - this.lastShot > 120) { // 2秒一发
-                // 瞄准玩家
-                let dx = (player.x+player.w/2) - (this.x+this.w/2);
-                let dy = (player.y+player.h/2) - (this.y+this.h/2);
-                let dist = Math.hypot(dx, dy);
-                if(dist < 300) { // 射程内
-                    bullets.push(new Bullet(this.x+10, this.y+10, dx/dist*3, dy/dist*3));
-                    this.lastShot = STATE.frame;
-                }
-            }
-        }
-
+        
         // 碰撞玩家
-        if(rectIntersect(this.x, this.y, this.w, this.h, player.x, player.y, player.w, player.h)) {
+        if(checkRect(this.x, this.y, this.w, this.h, player.x, player.y, player.w, player.h)) {
             player.die();
         }
-    }
-    draw(ctx) {
-        ctx.fillStyle = '#ff004d';
-        // 简单的无人机形状
-        ctx.beginPath(); 
-        ctx.moveTo(this.x, this.y); ctx.lineTo(this.x+this.w, this.y); 
-        ctx.lineTo(this.x+this.w/2, this.y+this.h); 
-        ctx.fill();
-        // 扫描眼
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(this.x+this.w/2-2, this.y+5, 4, 4);
-    }
-}
 
-class Bullet {
-    constructor(x, y, vx, vy) {
-        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-        this.life = 100;
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy; this.life--;
-        if(rectIntersect(this.x-3, this.y-3, 6, 6, player.x, player.y, player.w, player.h)) {
-            player.die(); this.life = 0;
+        // 射击
+        if(this.shooter && STATE.frame - this.lastShot > 100) {
+            let dx = player.x - this.x; let dy = player.y - this.y;
+            let dist = Math.hypot(dx, dy);
+            if(dist < 250) {
+                bullets.push({x: this.x+10, y: this.y+10, vx: dx/dist*3, vy: dy/dist*3});
+                this.lastShot = STATE.frame;
+            }
         }
     }
     draw(ctx) {
-        ctx.fillStyle = '#ffeb3b';
-        ctx.beginPath(); ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#f04';
+        ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x+this.w, this.y); ctx.lineTo(this.x+this.w/2, this.y+this.h); ctx.fill();
+        if(this.shooter) { ctx.fillStyle='#ff0'; ctx.fillRect(this.x+8, this.y+15, 8, 8); }
     }
 }
 
-function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
-    return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+// --- 辅助函数 ---
+function checkRect(x1, y1, w1, h1, x2, y2, w2, h2) {
+    return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+}
+
+function spawnFx(x, y, n, c, s=1) {
+    for(let i=0; i<n; i++) particles.push({x, y, vx:(Math.random()-0.5)*5*s, vy:(Math.random()-0.5)*5*s, life:1, c});
 }
 
 const player = new Player();
 
-// --- 关卡系统 (垂直构建) ---
-
-function initGame(mode) {
-    SETTINGS = PRESETS[mode];
-    document.getElementById('start-screen').style.opacity = 0;
-    setTimeout(()=>document.getElementById('start-screen').style.display='none', 500);
-    document.getElementById('hud').style.display = 'block';
+// --- 关卡生成 ---
+function startGame(mode) {
+    SETTINGS = JSON.parse(JSON.stringify(PRESETS[mode]));
+    document.getElementById('menu-screen').style.opacity = 0;
+    setTimeout(() => document.getElementById('menu-screen').style.display = 'none', 500);
     
-    buildMainLevel();
-    STATE.mode = 'PLAY'; STATE.collected = 0; STATE.frame = 0;
+    buildLevel();
+    STATE.mode = 'PLAY';
+    STATE.frame = 0;
     player.reset();
     loop();
 }
 
-function buildMainLevel() {
-    platforms = []; stars = []; enemies = []; bullets = [];
-    STATE.camY = 0; STATE.spawn = {x: 100, y: 500};
-    
-    // 帮助函数
-    const addP = (x,y,w,h,t,s=0) => platforms.push({x,y,w,h,t,s,act:false});
-    const addStar = (x,y) => stars.push({x,y,c:false});
+function buildLevel() {
+    platforms = []; stars = []; enemies = []; bullets = []; particles = [];
+    STATE.collected = 0;
+    STATE.spawn = {x: 50, y: 500};
+    STATE.camY = 0;
 
-    // 1. 地面与基础
+    const addP = (x, y, w, h, t, s=0) => platforms.push({x, y, w, h, type:t, slide:s, active:false});
+    const addS = (x, y) => stars.push({x, y, c:false});
+
+    // 1. 基础地面
     addP(0, 550, 360, 50, 0);
-    addP(50, 450, 80, 20, 0);
-    addP(200, 350, 80, 20, 0); // Save 1
-    addP(200, 350, 80, 20, 4); // Save Trigger
-
-    // 2. 垂直上升 (知识锁)
-    addP(50, 250, 60, 20, 1);
-    addP(250, 150, 60, 20, 1);
-    addStar(280, 120); // Star 1
-
-    // 3. 冰面与尖刺 (向上)
-    addP(100, 0, 160, 20, 2, 2); // 向右滑
-    addP(280, 0, 80, 20, 0);
-    addP(200, -100, 40, 20, 0);
-    addP(50, -200, 100, 20, 0);
-    addP(180, -200, 100, 20, 3); // Spike
-    addStar(60, -230); // Star 2
-
-    // 4. 最终塔楼
-    addP(50, -350, 60, 20, 1);
-    addP(250, -450, 60, 20, 1);
-    addP(100, -550, 160, 20, 0); // Save 2
-    addP(150, -550, 60, 20, 4);
+    addP(100, 450, 100, 20, 0);
     
-    // 困难跳跃
-    addP(300, -700, 60, 20, 2, -3);
-    addStar(330, -730); // Star 3
+    // 2. 知识锁攀登
+    addP(50, 350, 80, 20, 1);
+    addP(230, 250, 80, 20, 1);
+    addS(50, 320); // Star 1
 
-    // 月球位置
-    moonGate = {x: 180, y: -900, r: 50};
-    addP(130, -820, 100, 20, 0);
+    // 3. 冰面与存档
+    addP(100, 150, 160, 20, 2, 2); // 冰面
+    addP(50, 50, 80, 20, 4); // 存档点
 
-    STATE.totalStars = stars.length;
-    document.getElementById('max-star').innerText = STATE.totalStars;
+    // 4. 尖刺陷阱区
+    addP(200, -50, 100, 20, 0);
+    addP(50, -150, 200, 20, 3); // 尖刺平台
+    addP(120, -150, 60, 10, 0); // 尖刺上的落脚点
+    addS(300, -80); // Star 2
+
+    // 5. 最终塔楼
+    addP(0, -250, 80, 20, 1);
+    addP(280, -350, 80, 20, 1);
+    addP(100, -450, 160, 20, 0);
+    addP(150, -550, 60, 20, 2, -3); // 逆向冰面
+    addS(180, -580); // Star 3
+
+    // 月球入口
+    moon = {x: 180, y: -750, r: 40};
+    addP(130, -650, 100, 20, 0);
+    
+    document.getElementById('stars-count').innerText = "0";
 }
 
-function enterHiddenLevel() {
-    // 切换状态
+function loadHiddenLevel() {
     STATE.mode = 'HIDDEN';
-    STATE.spawn = {x: 50, y: -1000}; // 新起点
+    STATE.spawn = {x: 50, y: -1000};
     player.reset();
     
-    // 视觉特效
-    document.getElementById('game-container').classList.add('dark-mode');
-    document.getElementById('stars-bg').style.filter = 'hue-rotate(280deg) contrast(1.2)';
-    document.getElementById('warning-flash').style.animation = 'flashAlarm 1s infinite';
-    setTimeout(() => document.getElementById('warning-flash').style.animation = 'none', 3000);
+    // 视觉效果
+    document.getElementById('game-stage').classList.add('dark-mode');
+    const warn = document.getElementById('warning-overlay');
+    warn.style.opacity = 0.3; setTimeout(()=>warn.style.opacity=0, 1000);
 
-    // 构建隐藏关地图 (位于主地图上方极远处)
-    let baseY = -1000;
+    // 隐藏关地图 (y: -1000 向上)
+    let by = -1000;
+    platforms.push({x:0, y:by+50, w:150, h:20, type:0});
     
-    // 起点
-    platforms.push({x: 0, y: baseY + 50, w: 150, h: 20, t: 0});
-    
-    // 敌人长廊
-    platforms.push({x: 150, y: baseY - 100, w: 200, h: 20, t: 0});
-    enemies.push(new Enemy(200, baseY - 120, 80, 'WALKER')); // 巡逻兵
-    
-    // 垂直相位跳 + 射手
-    platforms.push({x: 50, y: baseY - 250, w: 60, h: 20, t: 1});
-    platforms.push({x: 250, y: baseY - 350, w: 60, h: 20, t: 1});
-    // 浮空炮台
-    platforms.push({x: 150, y: baseY - 450, w: 60, h: 20, t: 0});
-    enemies.push(new Enemy(160, baseY - 470, 20, 'SHOOTER'));
+    // 敌人区域
+    platforms.push({x:150, y:by-100, w:200, h:20, type:0});
+    enemies.push(new Enemy(200, by-120, 80, false));
 
-    // 最终挑战
-    platforms.push({x: 0, y: baseY - 600, w: 360, h: 20, t: 3}); // 全屏底刺
-    platforms.push({x: 50, y: baseY - 650, w: 40, h: 10, t: 0});
-    platforms.push({x: 270, y: baseY - 750, w: 40, h: 10, t: 0});
-    platforms.push({x: 160, y: baseY - 850, w: 40, h: 10, t: 0});
-    
-    enemies.push(new Enemy(50, baseY - 900, 150, 'SHOOTER')); // 最终守卫
+    platforms.push({x:50, y:by-250, w:60, h:20, type:1});
+    platforms.push({x:250, y:by-350, w:60, h:20, type:1});
+    enemies.push(new Enemy(150, by-400, 0, SETTINGS.shoot)); // 炮台
 
-    // 核心
-    trueCore = {x: 180, y: baseY - 950};
+    // 最终核心
+    platforms.push({x:120, y:by-500, w:120, h:20, type:0});
+    moon = {x:180, y:by-600, r:20, core:true}; // 核心
 }
 
-function gameLoop() {
-    requestAnimationFrame(gameLoop);
-    if(STATE.mode === 'MENU' || STATE.mode === 'END') return;
+// --- 游戏循环 ---
+function loop() {
+    if(STATE.mode === 'MENU') return;
+    requestAnimationFrame(loop);
     STATE.frame++;
-
+    
+    // 更新玩家
     player.update();
 
-    // 相机垂直跟随 (缓动)
-    let targetY = player.y - H * 0.6; // 玩家处于屏幕中下方
+    // 摄像机平滑跟随 (垂直)
+    let targetY = player.y - H * 0.6;
     STATE.camY += (targetY - STATE.camY) * 0.1;
 
-    // 收集星星
-    stars.forEach(s => {
-        if(!s.c && Math.hypot(player.x-s.x, player.y-s.y) < 25) {
-            s.c = true; STATE.collected++;
-            document.getElementById('cur-star').innerText = STATE.collected;
-            spawnPart(s.x, s.y, 15, '#ffd700');
-        }
-    });
-
-    // 敌人逻辑 (仅在隐藏关或特定区域启用)
-    enemies.forEach(e => e.update());
-    for(let i=bullets.length-1; i>=0; i--) {
-        bullets[i].update();
-        if(bullets[i].life<=0) bullets.splice(i,1);
-    }
-
-    // 关卡出口逻辑
+    // 更新杂项
     if(STATE.mode === 'PLAY') {
-        // 接触月球
-        if(Math.hypot(player.x+8 - moonGate.x, player.y+12 - moonGate.y) < moonGate.r) {
-            if(STATE.collected === STATE.totalStars) {
-                enterHiddenLevel();
-            } else {
-                endGame(false, "Moon Reached... But data incomplete.");
+        stars.forEach(s => {
+            if(!s.c && Math.hypot(player.x-s.x, player.y-s.y) < 25) {
+                s.c = true; STATE.collected++;
+                document.getElementById('stars-count').innerText = STATE.collected;
+                spawnFx(s.x, s.y, 10, '#ffd700');
             }
+        });
+        // 检查进入月球
+        if(Math.hypot(player.x+8-moon.x, player.y+12-moon.y) < moon.r) {
+            if(STATE.collected >= 3) loadHiddenLevel();
+            else { alert("ACCESS DENIED: Collect 3 Chips!"); player.y += 50; } // 弹开
         }
-    } else if (STATE.mode === 'HIDDEN') {
-        // 接触真核心
-        if(Math.hypot(player.x+8 - trueCore.x, player.y+12 - trueCore.y) < 30) {
-            endGame(true, "HIDDEN DIMENSION CONQUERED!");
+    } 
+    else if(STATE.mode === 'HIDDEN') {
+        enemies.forEach(e => e.update(player));
+        for(let i=bullets.length-1; i>=0; i--) {
+            let b = bullets[i]; b.x+=b.vx; b.y+=b.vy; 
+            if(checkRect(b.x-3,b.y-3,6,6, player.x,player.y,player.w,player.h)) player.die();
+        }
+        if(Math.hypot(player.x+8-moon.x, player.y+12-moon.y) < 30) {
+            alert("SYSTEM HACKED! YOU WIN!");
+            location.reload();
         }
     }
-
+    
+    // 渲染
     draw();
-}
-
-function endGame(win, text) {
-    STATE.mode = 'END';
-    const screen = document.getElementById('end-screen');
-    screen.style.opacity = 1; screen.style.pointerEvents = 'auto';
-    document.getElementById('end-title').innerText = win ? "TRUE ENDING" : "MISSION END";
-    document.getElementById('end-title').style.color = win ? "#00d2ff" : "#ccc";
-    document.getElementById('end-desc').innerText = text;
-}
-
-function spawnPart(x, y, n, c) {
-    for(let i=0; i<n; i++) particles.push({x, y, vx:(Math.random()-0.5)*5, vy:(Math.random()-0.5)*5, life:1, c});
 }
 
 function draw() {
@@ -573,82 +505,65 @@ function draw() {
     ctx.save();
     ctx.translate(0, -STATE.camY);
 
-    // 1. 绘制物体
-    // 月球 (仅在普通模式显示)
-    if(STATE.mode === 'PLAY') {
-        ctx.shadowBlur = 40; ctx.shadowColor = '#fff';
-        ctx.fillStyle = '#eee'; ctx.beginPath(); ctx.arc(moonGate.x, moonGate.y, moonGate.r, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0;
-    } 
-    // 真核心 (隐藏模式)
-    else {
-        ctx.shadowBlur = 40; ctx.shadowColor = '#f0f';
-        ctx.fillStyle = '#fff'; 
-        ctx.beginPath(); 
-        let off = Math.sin(STATE.frame*0.1)*5;
-        ctx.moveTo(trueCore.x, trueCore.y-20+off);
-        ctx.lineTo(trueCore.x+20, trueCore.y+off);
-        ctx.lineTo(trueCore.x, trueCore.y+20+off);
-        ctx.lineTo(trueCore.x-20, trueCore.y+off);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-    }
+    // 绘制月球/核心
+    ctx.shadowBlur = 20; ctx.shadowColor = moon.core ? '#f0f' : '#fff';
+    ctx.fillStyle = moon.core ? '#fff' : '#eee';
+    ctx.beginPath(); 
+    if(moon.core) { // 菱形核心
+        ctx.moveTo(moon.x, moon.y-20); ctx.lineTo(moon.x+20, moon.y);
+        ctx.lineTo(moon.x, moon.y+20); ctx.lineTo(moon.x-20, moon.y);
+    } else { ctx.arc(moon.x, moon.y, moon.r, 0, Math.PI*2); }
+    ctx.fill(); ctx.shadowBlur = 0;
 
     // 平台
     platforms.forEach(p => {
-        if(p.t===0) { ctx.fillStyle='#345'; ctx.fillRect(p.x,p.y,p.w,p.h); ctx.fillStyle='#0df'; ctx.fillRect(p.x,p.y,p.w,2); }
-        else if(p.t===1) { // Phase
-            if(KEYS.Lens) { ctx.fillStyle='rgba(255,50,50,0.3)'; ctx.strokeStyle='#f55'; ctx.lineWidth=2; ctx.strokeRect(p.x,p.y,p.w,p.h); ctx.fillRect(p.x,p.y,p.w,p.h); }
-            else { ctx.strokeStyle='rgba(255,50,50,0.2)'; ctx.setLineDash([4,4]); ctx.strokeRect(p.x,p.y,p.w,p.h); ctx.setLineDash([]); }
+        if(p.type===0) { ctx.fillStyle='#345'; ctx.fillRect(p.x,p.y,p.w,p.h); ctx.fillStyle='#0df'; ctx.fillRect(p.x,p.y,p.w,3); }
+        else if(p.type===1) { // 相位
+            if(KEYS.Lens) { ctx.fillStyle='rgba(255,50,50,0.4)'; ctx.fillRect(p.x,p.y,p.w,p.h); ctx.strokeStyle='#f55'; ctx.lineWidth=2; ctx.strokeRect(p.x,p.y,p.w,p.h); }
+            else { ctx.strokeStyle='rgba(255,50,50,0.3)'; ctx.setLineDash([4,4]); ctx.strokeRect(p.x,p.y,p.w,p.h); ctx.setLineDash([]); }
         }
-        else if(p.t===2) { // Ice
+        else if(p.type===2) { // 冰
             ctx.fillStyle='rgba(150,220,255,0.5)'; ctx.fillRect(p.x,p.y,p.w,p.h);
-            let off = (p.s>0 ? STATE.frame : -STATE.frame)%20;
-            ctx.fillStyle='#fff'; for(let i=0; i<p.w; i+=20) if(p.x+i+off<p.x+p.w) ctx.fillRect(p.x+i+off, p.y+5, 2, 2);
+            let off = (STATE.frame* (p.slide>0?2:-2))%20;
+            ctx.fillStyle='#fff'; for(let i=0;i<p.w;i+=20) if(p.x+i+off<p.x+p.w-2) ctx.fillRect(p.x+i+off,p.y+5,2,2);
         }
-        else if(p.t===3) { // Spike
-            ctx.fillStyle='#f00'; ctx.beginPath();
-            for(let i=0; i<p.w; i+=10) { ctx.moveTo(p.x+i, p.y+p.h); ctx.lineTo(p.x+i+5, p.y); ctx.lineTo(p.x+i+10, p.y+p.h); }
+        else if(p.type===3) { // 刺
+            ctx.fillStyle='#e33'; ctx.beginPath();
+            for(let i=0;i<p.w;i+=10) { ctx.moveTo(p.x+i,p.y+p.h); ctx.lineTo(p.x+i+5,p.y); ctx.lineTo(p.x+i+10,p.y+p.h); }
             ctx.fill();
         }
-        else if(p.t===4) { // Save
-            ctx.fillStyle = p.act ? '#2f5' : '#567'; ctx.fillRect(p.x, p.y, p.w, p.h);
-            if(p.act) { ctx.fillStyle='rgba(50,255,100,0.2)'; ctx.fillRect(p.x, p.y-100, p.w, 100); }
+        else if(p.type===4) { // 存档
+            ctx.fillStyle = p.active?'#2e5':'#456'; ctx.fillRect(p.x,p.y,p.w,p.h);
+            if(p.active) { ctx.fillStyle='rgba(50,255,100,0.2)'; ctx.fillRect(p.x,p.y-50,p.w,50); }
         }
     });
 
-    // 星星
-    stars.forEach(s => {
-        if(!s.c) {
-            ctx.fillStyle='#ffd700'; ctx.shadowBlur=10; ctx.shadowColor='#ffd700';
-            ctx.save(); ctx.translate(s.x, s.y+Math.sin(STATE.frame*0.1)*5); ctx.rotate(STATE.frame*0.05);
-            ctx.fillRect(-6,-6,12,12); ctx.restore(); ctx.shadowBlur=0;
-        }
-    });
-
-    // 敌人与子弹
+    // 杂项
+    stars.forEach(s => { if(!s.c) {
+        ctx.fillStyle='#ffd700'; ctx.shadowBlur=10; ctx.shadowColor='#ffd700';
+        ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(STATE.frame*0.1); ctx.fillRect(-5,-5,10,10); ctx.restore(); ctx.shadowBlur=0;
+    }});
     enemies.forEach(e => e.draw(ctx));
-    bullets.forEach(b => b.draw(ctx));
-
-    player.draw(ctx);
-
+    bullets.forEach(b => { ctx.fillStyle='#ff0'; ctx.beginPath(); ctx.arc(b.x,b.y,4,0,6.28); ctx.fill(); });
+    
     // 粒子
     for(let i=particles.length-1; i>=0; i--) {
         let p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.life-=0.05;
-        ctx.globalAlpha=p.life; ctx.fillStyle=p.c; ctx.fillRect(p.x,p.y,3,3);
+        ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.c; ctx.fillRect(p.x,p.y,3,3);
         if(p.life<=0) particles.splice(i,1);
     }
     ctx.globalAlpha=1;
-
+    
+    player.draw(ctx);
     ctx.restore();
 
-    // UI特效：透镜红框
-    if(KEYS.Lens) {
-        ctx.strokeStyle = 'rgba(255,0,0,0.3)'; ctx.lineWidth=4; ctx.strokeRect(0,0,W,H);
-    }
+    // 透镜特效
+    if(KEYS.Lens) { ctx.strokeStyle='rgba(255,0,0,0.3)'; ctx.lineWidth=4; ctx.strokeRect(0,0,W,H); }
+    
     // UI 更新
     document.getElementById('fuel-bar').style.width = player.fuel + "%";
 }
+
 </script>
 </body>
 </html>
